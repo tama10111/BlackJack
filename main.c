@@ -11,9 +11,6 @@
  * Created on 19 mars 2018, 12:22
  */
 
-#define CARD_DIST_REQ 98
-#define CARD_DIST_RESP 89
-
 #include <stdio.h>
 #include <stdlib.h>
 #include "player.h"
@@ -24,34 +21,36 @@
 #include <fcntl.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 
-typedef struct gamefile_t{
-    int nj;
-    int nd;
-    int nm;
-    struct playerfile_t* next;
-} gamefile_t;
+typedef struct gamevars_t{
+    int numofplayers;
+    int numofdecks;
+    int numofhands;
+    struct playervars_t* next;
+} gamevars_t;
 
-typedef struct playerfile_t{
-    int njet;
-    int nmise;
-    int nstop;
-    int objeton;
-    char smise;
-    struct playerfile_t* next;
-} playerfile_t;
+//Lis le PDF du projet pour comprendre à quel champ correspond quel variable
+//pour les deux structures
 
-void* CARD_SENDER(int i, siginfo_t* sinfo, void* ucontext){
-    
+typedef struct playervars_t{
+    int numoftokens;
+    int bet;
+    int stop;
+    int goal;
+    char bet_symbol;
+    struct playervars_t* next;
+} playervars_t;
+
+void* TOKEN_SIGNAL(int i, siginfo_t* sinfo, void* ucontext){    
 }
 
-void* CARD_RECEIVER(int i, siginfo_t* sifon, void* ucontext){
-    
+void* CARD_SIGNAL(int i, siginfo_t* sinfo, void* ucontext){
 }
 
 
-void free_playerfile(playerfile_t* p){
-    playerfile_t* tmp;
+void free_playervars(playervars_t* p){
+    playervars_t* tmp;
     while(p != 0){
         tmp = p->next;
         free(p);
@@ -63,13 +62,14 @@ void BUFFEROVERFLOOOOOOOW(){
     exit(666);
 }
 
-int load_file(gamefile_t* gfile, char* buf, int size){
+//Fonction à rendre plus élégante
+int load_file(gamevars_t* gfile, char* buf, int size){
     char str[22];
     memset(str, 0, 22);
     int comut = 1;
     int str_i = 0, gfile_i = 0, buf_i = 0, pfile_i = 0;
     
-    while(comut){ //CHARGE LA PREMIERE LIGNE (structure différente des suivantes)
+    while(comut){ //CHARGE LA PREMIERE LIGNE (variables associées au jeu)
         switch(buf[buf_i]){
             case ';' :
 hell:
@@ -91,11 +91,11 @@ hell:
         }
     }  
     
-    playerfile_t* pfile = calloc(1, sizeof(playerfile_t));  
+    playervars_t* pfile = calloc(1, sizeof(playervars_t));  
     gfile->next = pfile;
     comut = 1;
     
-    while(comut){//CHARGE LES LIGNES SUIVANTES
+    while(comut){//CHARGE LES LIGNES SUIVANTES (variables associées aux joueurs)
         switch(buf[buf_i]){
             case ';' :
                 *(((int*) pfile)+pfile_i) = atoi(str);
@@ -109,7 +109,7 @@ hell:
                 str_i = 0; buf_i++, pfile_i = 0;
                 memset(str, 0, 22);
                 if(buf_i != size){
-                    pfile->next = calloc(1, sizeof(playerfile_t));
+                    pfile->next = calloc(1, sizeof(playervars_t));
                     pfile = pfile->next;                                        
                 } else{
                     comut = 0;
@@ -117,11 +117,11 @@ hell:
                 break;
                                                 
             case '+' :
-                pfile->smise = '+'; buf_i++;                
+                pfile->bet_symbol = '+'; buf_i++;                
                 break;
 
             case '-':
-                pfile->smise = '-'; buf_i++;                
+                pfile->bet_symbol = '-'; buf_i++;                
                 break;
                 
             default :
@@ -167,48 +167,63 @@ int main(int argc, char** argv) {
         return errno;
     } close(fd);
 
-    gamefile_t gamefile;
+    gamevars_t gamefile;
     if(load_file(&gamefile, buf, st.st_size) == -1){
         printf("LOAD_FILE : An error occured when I was loading this file :'(\n");
         close(fd);
         return 1;
     }
         
-    playerfile_t* p = gamefile.next;
+    playervars_t* p = gamefile.next;
     player_t player;
 
-    pid_t pid;
-        
-    while(p != NULL){
-        pid = fork();
-        if(!pid){
-            player.money = p->njet;
-            player.pid = pid;
-            player.tech = p->smise;
-            player.obj = p->objeton;
-            player.stop_val = p->nstop;
-            player.mise = p->nmise;
-            break;
-        } else{
-            p = p->next;
+    pid_t l_pid[gamefile.numofplayers];
+    
+    /*
+     * pipe_fd[x][0][0] PARENT READ
+     * pipe_fd[x][0][1] CHILD WRITE
+     * pipe_fd[x][1][0] CHILD READ
+     * pipe_fd[x][1][1] PARENT WRITE
+     */
+    
+    int pipe_fd[gamefile.numofplayers][2][2];
+    int i;
+    
+    for(i = 0; p != NULL; i++){
+
+        if(pipe(pipe_fd[i][0]) + pipe(pipe_fd[i][1]) != 0){
+            perror("PIPE :");
+            return errno;
         }
+        
+        l_pid[i] = fork();
+                       
+        if(l_pid[i] == 0){
+            player.money = p->numoftokens;
+            player.pid = getpid();
+            player.bet_symbol = p->bet_symbol;
+            player.goal = p->goal;
+            player.stop = p->stop;
+            player.bet = p->bet;
+            player.pipe_fd_read = pipe_fd[i][1][0];
+            player.pipe_fd_write = pipe_fd[i][0][1];
+            break;            
+        } else p = p->next;
     }
     
-    if(pid != 0){
+    if(l_pid[i] != 0){
+
         initDeckLib();
-        deck_t* deck = initDeck(P52, gamefile.nd);
+        deck_t* deck = initDeck(P52, gamefile.numofdecks);
 
-        struct sigaction saction;
-        saction.sa_flags = SA_SIGINFO;
-        saction.sa_sigaction = CARD_RECEIVER;
-
-        sigaction(CARD_DIST_REQ, &saction, NULL);
-        sigaction(CARD_)
+        //Do stuff...
         
-
-        free(gamefile.next);        
+        int stat;
+        for(int i = 0; i<gamefile.numofplayers; i++) wait(&stat);
+        free(gamefile.next);
+        
     } else{
-        
+        //Do stuff...        
     }
     
     return EXIT_SUCCESS;

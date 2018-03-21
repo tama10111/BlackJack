@@ -18,12 +18,14 @@
 
 typedef struct player_t{
     int pid;
+    int pipe_fd_read;
+    int pipe_fd_write;
     struct card* hand;
     int money;
-    char tech;
-    int obj;
-    int stop_val;
-    int mise;
+    char bet_symbol;
+    int goal;
+    int stop;
+    int bet;
 } player_t;
 
 
