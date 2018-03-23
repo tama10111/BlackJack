@@ -25,7 +25,8 @@ typedef struct player_t{
     int goal;
     int stop;
     int bet;
-    struct card* hand;
+    struct card_t* hand;
+    int hand_value;
 } player_t;
 
 

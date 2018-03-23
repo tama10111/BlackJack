@@ -39,6 +39,9 @@
         <rebuildPropChanged>false</rebuildPropChanged>
       </toolsSet>
       <compileType>
+        <cTool>
+          <commandLine>-g</commandLine>
+        </cTool>
       </compileType>
       <item path="deck.c" ex="false" tool="0" flavor2="0">
       </item>
