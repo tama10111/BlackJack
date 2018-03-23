@@ -23,7 +23,14 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 
+/*
+ * SIGNAUX
+ */
+
 #define END 666
+#define SEND_MONEY      0xf
+#define SEND_CARD       0xf0
+#define REQUEST_CARD    0xf00
 
 typedef struct gamevars_t{
     int numofplayers;
@@ -50,6 +57,20 @@ void free_playervars(playervars_t* p){
         tmp = p->next;
         free(p);
         p = tmp;
+    }
+}
+
+card_t* addCard(struct card_t* hand, int value){
+    if(hand == NULL){
+        hand = malloc(sizeof(card_t));
+        hand->next = NULL;
+        hand->value = value;
+        return hand;
+    } else{
+        hand->next = malloc(sizeof(card_t));
+        hand->next->value = value;
+        hand->next->next = NULL;
+        return hand->next;
     }
 }
 void BUFFEROVERFLOOOOOOOW(){
@@ -185,7 +206,7 @@ int main(int argc, char** argv) {
     int i;
     int pid;
 
-    for(i = 0; i < gamefile.numofplayers; i++){
+    for(i = 0; i < gamefile.numofplayers; i++){ //VOIR SI ON PEUT PAS DÉPLACER LE CONTENU DE CETTE BOUCLE EN DESSOUS, EN ALLANT DE J=0 À I POUR LE FERMETURE
         if(pipe(pipe_fd[i][0]) + pipe(pipe_fd[i][1]) != 0){
             perror("PIPE :");
             return errno;
@@ -209,6 +230,7 @@ int main(int argc, char** argv) {
             player.bet = p->bet;
             player.pipe_fd_read = pipe_fd[i][1][0];
             player.pipe_fd_write = pipe_fd[i][0][1];
+            player.hand = NULL;
             
             //On ferme les fichiers dont le process ne se servira pas;
 
@@ -230,31 +252,38 @@ int main(int argc, char** argv) {
 
         initDeckLib();
         deck_t* deck = initDeck(P52, gamefile.numofdecks);
+        struct card_t* bank_hand = NULL;
+        int hand_value = 0;
+        int w;
 
-        for(i = 0; i<gamefile.numofplayers; i++){
- 
-            int ret = 0;
-            int end = END;
-            int card1 = drawCard(deck);
-            int card2 = drawCard(deck);
-            
-            ret += write(pipe_fd[i][1][1], &card1, sizeof (int)); 
-            ret += write(pipe_fd[i][1][1], &card2, sizeof (int));
-            ret += write(pipe_fd[i][1][1], &end, sizeof (int));
-            
-            if(ret != 3*sizeof(int)){
-                perror("WRITE");
-                return errno;
-            }
-        }
-        
         for(i = 0; i<gamefile.numofplayers; i++){
             close(pipe_fd[i][0][0]);
             close(pipe_fd[i][1][0]);
             close(pipe_fd[i][0][1]);
             close(pipe_fd[i][1][1]);
         }
-                
+
+        
+        for(int j = 0; j<2; j++){
+
+            bank_hand = addCard(bank_hand, drawCard(deck));
+            hand_value += bank_hand->value;
+
+            for(i = 0; i<gamefile.numofplayers; i++){
+                w = SEND_CARD;
+                if(write(pipe_fd[i][1][1], &w, sizeof(int)) != sizeof(int)){
+                    perror("WRITE");
+                    return errno;
+                }
+
+                w = drawCard(deck);
+                if(write(pipe_fd[i][1][1], &w, sizeof(int)) != sizeof(int)){
+                    perror("WRITE");
+                    return errno;
+                }
+            }
+        }
+                        
         int stat;
         for(i = 0; i<gamefile.numofplayers; i++) wait(&stat);
         free(gamefile.next);

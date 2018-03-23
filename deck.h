@@ -2,8 +2,8 @@
 #define _H_DECK_
 
 // Liste chaînée représentant une pile/suite de cartes
-typedef struct card {
-	struct card * next;		//< Carte suivante
+typedef struct card_t {
+	struct card_t * next;		//< Carte suivante
 	int value;				//< Valeur de la carte (entre 0 et 52)
 } card_t;
 
