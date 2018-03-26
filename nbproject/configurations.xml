@@ -4,7 +4,9 @@
     <logicalFolder name="HeaderFiles"
                    displayName="Header Files"
                    projectFiles="true">
+      <itemPath>constant.h</itemPath>
       <itemPath>deck.h</itemPath>
+      <itemPath>gamesig.h</itemPath>
       <itemPath>player.h</itemPath>
     </logicalFolder>
     <logicalFolder name="ResourceFiles"
@@ -43,9 +45,13 @@
           <commandLine>-g</commandLine>
         </cTool>
       </compileType>
+      <item path="constant.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="deck.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="deck.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="gamesig.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="main.c" ex="false" tool="0" flavor2="0">
       </item>
@@ -75,9 +81,13 @@
           <developmentMode>5</developmentMode>
         </asmTool>
       </compileType>
+      <item path="constant.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="deck.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="deck.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="gamesig.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="main.c" ex="false" tool="0" flavor2="0">
       </item>
