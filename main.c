@@ -43,13 +43,14 @@ typedef struct playervars_t{
 } playervars_t;
 
 typedef struct filevars_t{
-    char player_hand[10][10]; //Pour savoir quel joueur a la main. Sans doute pas nesseçaire
-    int phand_value[10]; 
+    char player_hand[10]; 
+    int phand_value; 
     char bank_hand[10];
     int bhand_value;
     int bet;
     int gain;
     int ntoken;    
+    char* path;
 } filevars_t;
 
 int ppow(int x,int n){
@@ -66,10 +67,10 @@ char * itoa(int i){ // DONE ça a l'air bien
     memset(a,0,21);
     int k=0;
     for (int j=0; j<20; j++){
-        a[j]=i/(ppow(10,20-j))+'0';
+        a[j]=i/(ppow(10,20-j));
         i-=i/(ppow(10,20-j));
         if (a[j] != 0){
-            a[k]=a[j];
+            a[k]=a[j]+'0';
             k+=1;
         }
     }
@@ -245,7 +246,9 @@ int main(int argc, char** argv) {
     playervars_t* p = gamefile.next;
     player_t player;
     
-    filevars_t fic;
+    
+    int liste_file[gamefile.numofplayers];
+    filevars_t filevars[gamefile.numofplayers];
     
     pid_t l_pid[gamefile.numofplayers];
     
@@ -320,19 +323,21 @@ int main(int argc, char** argv) {
         for(int j = 0; j<2; j++){
 
             bank_hand = addCard(bank_hand, drawCard(deck));
-            fic.bank_hand[j]=bank_hand->value;
             hand_value += getCardValue(bank_hand->value, hand_value);
-            fic.bhand_value=hand_value;
+            for(i=0; i<gamefile.numofplayers; i++){
+                filevars[i].bank_hand[j]=bank_hand;
+                filevars[i].bhand_value=hand_value;
+            }
 
             for(i = 0; i<gamefile.numofplayers; i++){
                 sig = SEND_CARD;
                 raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE1");
-
                 sig = drawCard(deck);
-                fic.player_hand[i][j]=sig;
                 players_hand[i]+=getCardValue(sig, hand_value);
-                fic.phand_value[i]=players_hand[i];
-                raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE2");                
+                filevars[i].player_hand[j]=sig;
+                filevars[i].phand_value=players_hand[i];
+                raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE2");      
+                filevars[i].path=strcat("fichierjoueur",itoa(i)); //Je profite de cette boucle pour initialiser mon chemin pour file
             }
         }
         
@@ -358,10 +363,10 @@ int main(int argc, char** argv) {
                         case REQUEST_CARD :
                             sig = drawCard(deck);
                             int j=0;
-                            while (fic.player_hand[end_round][j] != 0){
+                            while (filevars[i].player_hand[j] != NULL){ 
                                 j=j+1;
                             }
-                            fic.player_hand[end_round][j]=sig;
+                            filevars[i].player_hand[j]=sig;
                             raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE5");
                             break;
 
@@ -377,13 +382,15 @@ int main(int argc, char** argv) {
 
             while(hand_value < 17){
                 bank_hand = addCard(bank_hand, drawCard(deck));
-                int j=0;
-                while (fic.bank_hand[j] != 0){
+                int i,j=0;
+                while (filevars[i].bank_hand[j]){
                     j=j+1;
-                }
-                fic.bank_hand[j]=bank_hand->value;
+                }  
                 hand_value += getCardValue(bank_hand->value, hand_value);
-                fic.bhand_value=hand_value;
+                for (i=0; i < gamefile.numofplayers; i++){
+                    filevars[i].bank_hand[j]=bank_hand;
+                    filevars[i].bhand_value=hand_value;
+                }
             }
             
             for(i = 0; i < gamefile.numofplayers; i++){
@@ -391,30 +398,36 @@ int main(int argc, char** argv) {
                     sig = SEND_MONEY;
                     raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE9");
                     raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ23");
+                    filevars[i].bet=tmp;
 
                     if((players_hand[i] > hand_value && players_hand[i] <= 21) || (hand_value > 21 && players_hand[i] <= 21)){
 
                         sig = WIN; tmp*= 2;
                         raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE6");
-                        raiseError(write(pipe_fd[i][1][1], &tmp, sizeof(int)) == -1, "WRITE11");                
+                        raiseError(write(pipe_fd[i][1][1], &tmp, sizeof(int)) == -1, "WRITE11");
+                        filevars[i].gain=tmp;
 
-                    } else if(players_hand[i] == hand_value){ //Cas où il y a égalité non ?
+                    } else if(players_hand[i] == hand_value){ 
 
-                        sig = WIN; tmp*= 2; // Ducoup plutot 1 ?
+                        sig = WIN; 
                         raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE6");                
                         raiseError(write(pipe_fd[i][1][1], &tmp, sizeof(int)) == -1, "WRITE12");  
+                        filevars[i].gain=tmp;
+                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ42"); //Ducoup j'ai rajouté des pipes pour avoir le nombre de jetons
+                        filevars[i].ntoken=tmp;
 
                     } else{
 
                         sig = LOSE;
                         raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE12");    
-
+                        filevars[i].gain=0;
+                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ88");
+                        filevars[i].ntoken=tmp;
                     }
                 }
             } 
             end_round = 0;
             hand_value = 0;
-            fic.bhand_value=0;
             n_round++;
             memset(waiting, 0, gamefile.numofplayers*sizeof(int));
             
@@ -437,7 +450,7 @@ int main(int argc, char** argv) {
         freeHand(bank_hand);
         exit(EXIT_SUCCESS);
     } 
-    
+//#############################################################################//
     else{
         int n;
 
@@ -485,14 +498,18 @@ end :
                     raiseError(read(player.pipe_fd_read, &n, sizeof(int)) == -1, "READ5");
                     player.money+=n;
                     player.current_bet = player.bet;
+                    raiseError(write(player.pipe_fd_write, &n, sizeof(int)) == -1, "WRITE42");
                     break;
                 
-                case LOSE :                    
+                case LOSE :    
+                    n=player.money;
                     if(player.bet_symbol == '+'){
                         player.current_bet *= 2;
                     } else if(player.bet_symbol == '-'){
                         player.current_bet = player.current_bet/2 + 1;
-                    } break;                    
+                    }
+                    raiseError(write(player.pipe_fd_write, &n, sizeof(int)) == -1, "WRITE88");
+                    break;                    
             }
         }
     }
