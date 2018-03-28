@@ -337,7 +337,26 @@ int main(int argc, char** argv) {
                 filevars[i].player_hand[j]=sig;
                 filevars[i].phand_value=players_hand[i];
                 raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE2");      
-                filevars[i].path=strcat("fichierjoueur",itoa(i)); //Je profite de cette boucle pour initialiser mon chemin pour file
+
+                //filevars[i].path=strcat("fichierjoueur",itoa(i)); //Je profite de cette boucle pour initialiser mon chemin pour file
+                /*
+                 * Mauvaise technique. Selon le man, le premier pointeur, doit avoir une taille suffisante pour contenir la concaténation des deux chaines de caractère.
+                 * Pourquoi ? Parce srtcat fonctionne comme ça :
+                 * 
+                 * Mes deux chaînes
+                 * 
+                 * 0 1 2 3 4 5 6 7 8    0 1 2 3 4 5 6 7 8 9
+                 * M a c h a i n e 0    M o n   a j o u t 0
+                 * 
+                 * Après strcat("Machaine", "Mon ajout")
+                 * 
+                 * 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
+                 * M a c h a i n e M o n     a  j  o  u  t  0
+                 * 
+                 * Le problème est que à l'adresse du pointeur vers "Machaine", seulement 8 octets de mémoire sont aloués pour ce pointeur
+                 * Le comportement est alors imprédictible, tu peux écrire par dessus le contenu d'un autre pointeur par exemple, faille qui peut être exploitée
+                 * Je te laisse corriger ça ;)
+                 */                                
             }
         }
         
@@ -362,11 +381,11 @@ int main(int argc, char** argv) {
 
                         case REQUEST_CARD :
                             sig = drawCard(deck);
-                            int j=0;
+                            int j=0; // Ici tu initialise j à chaque tour de boucle, tu ne peux pas initialiser deux fois la même variable
                             while (filevars[i].player_hand[j] != NULL){ 
                                 j=j+1;
                             }
-                            filevars[i].player_hand[j]=sig;
+                            filevars[i].player_hand[j]=sig;//Ici tu mets l'ID alors que l'on veut le caractère associé à l'ID
                             raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE5");
                             break;
 
@@ -382,13 +401,13 @@ int main(int argc, char** argv) {
 
             while(hand_value < 17){
                 bank_hand = addCard(bank_hand, drawCard(deck));
-                int i,j=0;
+                int i,j=0; //Tu réinitialise i qui est déjà initialisé au début du programme. Et tu réinitialise j
                 while (filevars[i].bank_hand[j]){
                     j=j+1;
                 }  
                 hand_value += getCardValue(bank_hand->value, hand_value);
                 for (i=0; i < gamefile.numofplayers; i++){
-                    filevars[i].bank_hand[j]=bank_hand;
+                    filevars[i].bank_hand[j]=bank_hand; // Idem, on veut le caractère associé à l'id
                     filevars[i].bhand_value=hand_value;
                 }
             }
@@ -414,6 +433,13 @@ int main(int argc, char** argv) {
                         raiseError(write(pipe_fd[i][1][1], &tmp, sizeof(int)) == -1, "WRITE12");  
                         filevars[i].gain=tmp;
                         raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ42"); //Ducoup j'ai rajouté des pipes pour avoir le nombre de jetons
+                        
+                        /*
+                         * J'vais faire mon chieur mais ce sont pas des pipes que tu rajoutes, t'écris/lis juste :P
+                         * Ça fonctionne bien comme ça, mais je me demande si créer un signal spécial pour request le nombre de jeton ne serait pas plus propre
+                         * à lire pour le programmeur.
+                         */
+                        
                         filevars[i].ntoken=tmp;
 
                     } else{
@@ -421,11 +447,14 @@ int main(int argc, char** argv) {
                         sig = LOSE;
                         raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE12");    
                         filevars[i].gain=0;
-                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ88");
+                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ88"); // SS o/
                         filevars[i].ntoken=tmp;
                     }
                 }
             } 
+            
+            // T'écris pas dans la fichier ?
+            
             end_round = 0;
             hand_value = 0;
             n_round++;
@@ -495,19 +524,21 @@ end :
                     break;
                 
                 case WIN :
+                    
                     raiseError(read(player.pipe_fd_read, &n, sizeof(int)) == -1, "READ5");
                     player.money+=n;
                     player.current_bet = player.bet;
-                    raiseError(write(player.pipe_fd_write, &n, sizeof(int)) == -1, "WRITE42");
+                    raiseError(write(player.pipe_fd_write, &n, sizeof(int)) == -1, "WRITE42"); // n = player.money non ?
                     break;
                 
                 case LOSE :    
-                    n=player.money;
+                    
                     if(player.bet_symbol == '+'){
                         player.current_bet *= 2;
                     } else if(player.bet_symbol == '-'){
                         player.current_bet = player.current_bet/2 + 1;
                     }
+                    n = player.money;
                     raiseError(write(player.pipe_fd_write, &n, sizeof(int)) == -1, "WRITE88");
                     break;                    
             }
