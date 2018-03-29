@@ -325,7 +325,7 @@ int main(int argc, char** argv) {
             bank_hand = addCard(bank_hand, drawCard(deck));
             hand_value += getCardValue(bank_hand->value, hand_value);
             for(i=0; i<gamefile.numofplayers; i++){
-                filevars[i].bank_hand[j]=bank_hand;
+                filevars[i].bank_hand[j]=itoa(bank_hand->value);
                 filevars[i].bhand_value=hand_value;
             }
 
@@ -334,11 +334,11 @@ int main(int argc, char** argv) {
                 raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE1");
                 sig = drawCard(deck);
                 players_hand[i]+=getCardValue(sig, hand_value);
-                filevars[i].player_hand[j]=sig;
+                filevars[i].player_hand[j]=itoa(sig);
                 filevars[i].phand_value=players_hand[i];
                 raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE2");      
-
-                //filevars[i].path=strcat("fichierjoueur",itoa(i)); //Je profite de cette boucle pour initialiser mon chemin pour file
+                filevars[i].path=malloc(2*sizeof(char*));
+                filevars[i].path=strcat("fichierjoueur",itoa(i)); //ça passe là non ?
                 /*
                  * Mauvaise technique. Selon le man, le premier pointeur, doit avoir une taille suffisante pour contenir la concaténation des deux chaines de caractère.
                  * Pourquoi ? Parce srtcat fonctionne comme ça :
@@ -382,10 +382,11 @@ int main(int argc, char** argv) {
                         case REQUEST_CARD :
                             sig = drawCard(deck);
                             int j=0; // Ici tu initialise j à chaque tour de boucle, tu ne peux pas initialiser deux fois la même variable
+                            //Je capte pas en quoi ça marche pas
                             while (filevars[i].player_hand[j] != NULL){ 
                                 j=j+1;
                             }
-                            filevars[i].player_hand[j]=sig;//Ici tu mets l'ID alors que l'on veut le caractère associé à l'ID
+                            filevars[i].player_hand[j]=itoa(sig);//Ici tu mets l'ID alors que l'on veut le caractère associé à l'ID
                             raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE5");
                             break;
 
@@ -402,12 +403,13 @@ int main(int argc, char** argv) {
             while(hand_value < 17){
                 bank_hand = addCard(bank_hand, drawCard(deck));
                 int i,j=0; //Tu réinitialise i qui est déjà initialisé au début du programme. Et tu réinitialise j
+                //Pareil
                 while (filevars[i].bank_hand[j]){
                     j=j+1;
                 }  
                 hand_value += getCardValue(bank_hand->value, hand_value);
                 for (i=0; i < gamefile.numofplayers; i++){
-                    filevars[i].bank_hand[j]=bank_hand; // Idem, on veut le caractère associé à l'id
+                    filevars[i].bank_hand[j]=itoa(bank_hand->value); // Idem, on veut le caractère associé à l'id
                     filevars[i].bhand_value=hand_value;
                 }
             }
