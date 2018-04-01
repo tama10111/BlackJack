@@ -63,13 +63,18 @@ char* itoa(int i){
     char* a  = calloc(21, sizeof(char));
     int j, k;
     
+    if(i == 0){
+        a[0] = '0';
+        return a;
+    }
+
     for (j=0; j<20; j++){
         a[j] = i/(ppow(10,19-j));
         i -= (i/(ppow(10,19-j)))*ppow(10,19-j);
     }
     
-    for(j=0; a[j]; j++);
-    for(k = 0; j < 21; j++, k++){
+    for(j=0; a[j] == 0; j++);
+    for(k = 0; j < 20; j++, k++){
         a[k] = a[j] + '0'; 
         a[j] = 0;
     } return a;
@@ -204,7 +209,7 @@ int main(int argc, char** argv) {
     }
     
     int fd;
-    raiseError((fd = open(argv[1], O_RDONLY)) == -1, "OPEN");
+    raiseError((fd = open(argv[1], O_RDONLY)) == -1, "OPEN1");
 
     struct stat st;
     raiseError(fstat(fd, &st) == -1, "STAT");
@@ -295,14 +300,8 @@ int main(int argc, char** argv) {
         memset(filevars,0,gamefile.numofplayers*sizeof(filevars_t));
         
 
-        for(i = 0; i<gamefile.numofplayers; i++){
-            printf("%i ", l_pid[i]);
-            filevars[i].path = itoa(l_pid[i]);
-            printf("%s ", filevars[i].path);
-            for(j = 0; j<21; j++) printf("%i ", filevars[i].path[j]);
-            printf("\n");
-        } return 0;
-        
+        for(i = 0; i<gamefile.numofplayers; i++) filevars[i].path = itoa(l_pid[i]);
+       
         n_round = 0;
         
         while(n_round < gamefile.numofhands){
@@ -383,6 +382,8 @@ int main(int argc, char** argv) {
                         raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE6");
                         raiseError(write(pipe_fd[i][1][1], &tmp, sizeof(int)) == -1, "WRITE11");
                         filevars[i].gain = tmp;
+                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ42");                        
+                        filevars[i].ntoken = tmp;
 
                         
                     } else if((filevars[i].phand_value > hand_value && filevars[i].phand_value <= 21) || (hand_value > 21 && filevars[i].phand_value <= 21)){
@@ -391,6 +392,8 @@ int main(int argc, char** argv) {
                         raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE6");
                         raiseError(write(pipe_fd[i][1][1], &tmp, sizeof(int)) == -1, "WRITE11");
                         filevars[i].gain = tmp;
+                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ42");                        
+                        filevars[i].ntoken = tmp;
 
                     } else if(filevars[i].phand_value == hand_value){ 
 
@@ -415,7 +418,7 @@ int main(int argc, char** argv) {
             
             for(i = 0; i<gamefile.numofplayers; i++){
                 
-                fd = raiseError(open(filevars[i].path, O_CREAT|O_WRONLY|O_APPEND) == -1, "OPEN");
+                raiseError((fd = open(filevars[i].path, O_CREAT|O_WRONLY|O_APPEND, S_IRUSR|S_IWUSR)) == -1, "OPEN2");
 
                 write(fd, filevars[i].player_hand, strlen(filevars[i].player_hand));
                 write(fd, ";", 1);
@@ -451,6 +454,9 @@ int main(int argc, char** argv) {
                 
                 memset(filevars[i].player_hand, 0, strlen(filevars[i].player_hand));
                 memset(hand, 0, strlen(hand));
+                filevars[i].bet = 0;
+                filevars[i].gain = 0;
+                filevars[i].phand_value = 0;
                 close(fd);
             }
                         
@@ -458,7 +464,6 @@ int main(int argc, char** argv) {
             hand_value = 0;
             n_round++;
             memset(waiting, 0, gamefile.numofplayers*sizeof(int));
-            
         }
 
         for(i = 0; i<gamefile.numofplayers; i++){
