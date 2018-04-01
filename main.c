@@ -44,9 +44,7 @@ typedef struct playervars_t{
 
 typedef struct filevars_t{
     char player_hand[10]; 
-    int phand_value; 
-    char bank_hand[10];
-    int bhand_value;
+    int phand_value;
     int bet;
     int gain;
     int ntoken;    
@@ -55,26 +53,26 @@ typedef struct filevars_t{
 
 int ppow(int x,int n){
     int res=1;
-    for (int i=0; i<n; i++){
-        res*=x;
-    }
+    int i;
+    for(i = 0; i<n; i++) res*=x;
     return res;
 }
 
 
-char * itoa(int i){ // DONE ça a l'air bien
-    char a[21];
-    memset(a,0,21);
-    int k=0;
-    for (int j=0; j<20; j++){
-        a[j]=i/(ppow(10,20-j));
-        i-=i/(ppow(10,20-j));
-        if (a[j] != 0){
-            a[k]=a[j]+'0';
-            k+=1;
-        }
+char* itoa(int i){
+    char* a  = calloc(21, sizeof(char));
+    int j, k;
+    
+    for (j=0; j<20; j++){
+        a[j] = i/(ppow(10,19-j));
+        i -= (i/(ppow(10,19-j)))*ppow(10,19-j);
     }
-    return a;
+    
+    for(j=0; a[j]; j++);
+    for(k = 0; j < 21; j++, k++){
+        a[k] = a[j] + '0'; 
+        a[j] = 0;
+    } return a;
 }
 
 int raiseError(int condition, char* error){
@@ -91,34 +89,6 @@ void free_playervars(playervars_t* p){
         tmp = p->next;
         free(p);
         p = tmp;
-    }
-}
-
-card_t* addCard(struct card_t* hand, int value){
-    
-    if(value == -1){
-        printf("Deck is empty\n");
-        exit(1);
-    }
-    
-    if(hand == NULL){
-        if((hand = malloc(sizeof(card_t))) == NULL){
-            printf("MALLOC : NULL returned\n");
-            exit(1);
-        }
-        hand->next = NULL;
-        hand->prev = NULL;
-        hand->value = value;
-        return hand;
-    } else{
-        if((hand->next = malloc(sizeof(card_t))) == NULL){
-            printf("MALLOC : NULL returned\n");
-            exit(1);
-        }
-        hand->next->value = value;
-        hand->next->prev = hand;
-        hand->next->next = NULL;
-        return hand->next;
     }
 }
 
@@ -215,12 +185,15 @@ hell:
 }
 
 int getCardValue(int card, int hand){   
-    if(getValueFromCardID(card) == 11 ){
-        if( hand <= 10){
-        return 11;
-        } 
-        else return 1;}
-    else return getValueFromCardID(card);  
+    if(getValueFromCardID(card) == 1){
+        if(hand <= 10) return 11;
+        else return 1;
+    } else return getValueFromCardID(card);  
+}
+
+char getCardChar(int id){
+    char letter[13] = {'A', '2', '3', '4', '5', '6', '7', '8', '9', 'X', 'J', 'Q', 'K'};
+    return letter[id%13];
 }
 
 int main(int argc, char** argv) {    
@@ -245,11 +218,7 @@ int main(int argc, char** argv) {
             
     playervars_t* p = gamefile.next;
     player_t player;
-    
-    
-    int liste_file[gamefile.numofplayers];
-    filevars_t filevars[gamefile.numofplayers];
-    
+        
     pid_t l_pid[gamefile.numofplayers];
     
     /*
@@ -260,11 +229,8 @@ int main(int argc, char** argv) {
      */
     
     int pipe_fd[gamefile.numofplayers][2][2];
-    int waiting[gamefile.numofplayers];
-    int exited[gamefile.numofplayers];
-    int players_hand[gamefile.numofplayers];
-
-    int i;
+    
+    int i, j;
     int pid;
     
     for(i = 0; i < gamefile.numofplayers; i++) raiseError(pipe(pipe_fd[i][0]) + pipe(pipe_fd[i][1]) != 0, "PIPE");
@@ -274,9 +240,6 @@ int main(int argc, char** argv) {
         raiseError((pid = fork()) == -1, "FORK");
 
         l_pid[i] = pid;
-        waiting[i] = 0;
-        players_hand[i] = 0;
-        exited[i] = 0;
 
         if(pid == 0){
 
@@ -313,56 +276,55 @@ int main(int argc, char** argv) {
         shuffleDeck(deck);
 
         int end_round = 0;        
-        struct card_t* bank_hand = NULL;
         int hand_value = 0;
         int sig;
         int tmp;
         int n_round;
         
+        char* ptr;
         
-        for(int j = 0; j<2; j++){
+        char hand[10];
+        int waiting[gamefile.numofplayers];
+        int exited[gamefile.numofplayers];
+        filevars_t filevars[gamefile.numofplayers];
 
-            bank_hand = addCard(bank_hand, drawCard(deck));
-            hand_value += getCardValue(bank_hand->value, hand_value);
-            for(i=0; i<gamefile.numofplayers; i++){
-                filevars[i].bank_hand[j]=itoa(bank_hand->value);
-                filevars[i].bhand_value=hand_value;
-            }
+        
+        memset(hand,0,10);
+        memset(waiting,0,gamefile.numofplayers*sizeof(int));
+        memset(exited,0,gamefile.numofplayers*sizeof(int));
+        memset(filevars,0,gamefile.numofplayers*sizeof(filevars_t));
+        
 
-            for(i = 0; i<gamefile.numofplayers; i++){
-                sig = SEND_CARD;
-                raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE1");
-                sig = drawCard(deck);
-                players_hand[i]+=getCardValue(sig, hand_value);
-                filevars[i].player_hand[j]=itoa(sig);
-                filevars[i].phand_value=players_hand[i];
-                raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE2");      
-                filevars[i].path=malloc(2*sizeof(char*));
-                filevars[i].path=strcat("fichierjoueur",itoa(i)); //ça passe là non ?
-                /*
-                 * Mauvaise technique. Selon le man, le premier pointeur, doit avoir une taille suffisante pour contenir la concaténation des deux chaines de caractère.
-                 * Pourquoi ? Parce srtcat fonctionne comme ça :
-                 * 
-                 * Mes deux chaînes
-                 * 
-                 * 0 1 2 3 4 5 6 7 8    0 1 2 3 4 5 6 7 8 9
-                 * M a c h a i n e 0    M o n   a j o u t 0
-                 * 
-                 * Après strcat("Machaine", "Mon ajout")
-                 * 
-                 * 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
-                 * M a c h a i n e M o n     a  j  o  u  t  0
-                 * 
-                 * Le problème est que à l'adresse du pointeur vers "Machaine", seulement 8 octets de mémoire sont aloués pour ce pointeur
-                 * Le comportement est alors imprédictible, tu peux écrire par dessus le contenu d'un autre pointeur par exemple, faille qui peut être exploitée
-                 * Je te laisse corriger ça ;)
-                 */                                
-            }
-        }
+        for(i = 0; i<gamefile.numofplayers; i++){
+            printf("%i ", l_pid[i]);
+            filevars[i].path = itoa(l_pid[i]);
+            printf("%s ", filevars[i].path);
+            for(j = 0; j<21; j++) printf("%i ", filevars[i].path[j]);
+            printf("\n");
+        } return 0;
         
         n_round = 0;
         
         while(n_round < gamefile.numofhands){
+            
+            for(j = 0; j<2; j++){
+
+                tmp = drawCard(deck);
+                hand[j] = getCardChar(tmp);
+                hand_value += getCardValue(tmp, hand_value);
+
+                for(i = 0; i<gamefile.numofplayers; i++){
+
+                    sig = SEND_CARD;
+                    raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE1");
+
+                    sig = drawCard(deck);
+
+                    filevars[i].phand_value += getCardValue(sig, hand_value);
+                    filevars[i].player_hand[j] = getCardChar(sig);
+                    raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE2");      
+                }
+            }
 
             sig = PLAY;
             for(i = 0; i<gamefile.numofplayers; i++) raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) != sizeof(int), "WRITE3");
@@ -381,12 +343,9 @@ int main(int argc, char** argv) {
 
                         case REQUEST_CARD :
                             sig = drawCard(deck);
-                            int j=0; // Ici tu initialise j à chaque tour de boucle, tu ne peux pas initialiser deux fois la même variable
-                            //Je capte pas en quoi ça marche pas
-                            while (filevars[i].player_hand[j] != NULL){ 
-                                j=j+1;
-                            }
-                            filevars[i].player_hand[j]=itoa(sig);//Ici tu mets l'ID alors que l'on veut le caractère associé à l'ID
+                            for(j = 0; filevars[i].player_hand[j]; j++);                            
+                            filevars[i].player_hand[j] = getCardChar(sig);
+                            filevars[i].phand_value += getCardValue(sig, filevars[i].phand_value);
                             raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE5");
                             break;
 
@@ -399,64 +358,102 @@ int main(int argc, char** argv) {
                 i = (i+1)%gamefile.numofplayers;
 
             }
+            
+            for(j = 0; hand[j]; j++);
 
             while(hand_value < 17){
-                bank_hand = addCard(bank_hand, drawCard(deck));
-                int i,j=0; //Tu réinitialise i qui est déjà initialisé au début du programme. Et tu réinitialise j
-                //Pareil
-                while (filevars[i].bank_hand[j]){
-                    j=j+1;
-                }  
-                hand_value += getCardValue(bank_hand->value, hand_value);
-                for (i=0; i < gamefile.numofplayers; i++){
-                    filevars[i].bank_hand[j]=itoa(bank_hand->value); // Idem, on veut le caractère associé à l'id
-                    filevars[i].bhand_value=hand_value;
-                }
+                tmp = drawCard(deck);
+                hand_value += getCardValue(tmp, hand_value);
+                hand[j] = getCardChar(tmp);
+                j++;
             }
             
             for(i = 0; i < gamefile.numofplayers; i++){
+                
                 if(!exited[i]){
+                    
                     sig = SEND_MONEY;
                     raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE9");
                     raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ23");
-                    filevars[i].bet=tmp;
-
-                    if((players_hand[i] > hand_value && players_hand[i] <= 21) || (hand_value > 21 && players_hand[i] <= 21)){
+                    filevars[i].bet = tmp;
+                    
+                    if(filevars[i].phand_value == 21 && strlen(filevars[i].player_hand) == 2){
 
                         sig = WIN; tmp*= 2;
                         raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE6");
                         raiseError(write(pipe_fd[i][1][1], &tmp, sizeof(int)) == -1, "WRITE11");
-                        filevars[i].gain=tmp;
+                        filevars[i].gain = tmp;
 
-                    } else if(players_hand[i] == hand_value){ 
+                        
+                    } else if((filevars[i].phand_value > hand_value && filevars[i].phand_value <= 21) || (hand_value > 21 && filevars[i].phand_value <= 21)){
+
+                        sig = WIN; tmp*= 2;
+                        raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE6");
+                        raiseError(write(pipe_fd[i][1][1], &tmp, sizeof(int)) == -1, "WRITE11");
+                        filevars[i].gain = tmp;
+
+                    } else if(filevars[i].phand_value == hand_value){ 
 
                         sig = WIN; 
                         raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE6");                
                         raiseError(write(pipe_fd[i][1][1], &tmp, sizeof(int)) == -1, "WRITE12");  
-                        filevars[i].gain=tmp;
-                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ42"); //Ducoup j'ai rajouté des pipes pour avoir le nombre de jetons
-                        
-                        /*
-                         * J'vais faire mon chieur mais ce sont pas des pipes que tu rajoutes, t'écris/lis juste :P
-                         * Ça fonctionne bien comme ça, mais je me demande si créer un signal spécial pour request le nombre de jeton ne serait pas plus propre
-                         * à lire pour le programmeur.
-                         */
-                        
-                        filevars[i].ntoken=tmp;
+                        filevars[i].gain = tmp;
+                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ42");                        
+                        filevars[i].ntoken = tmp;
 
                     } else{
 
                         sig = LOSE;
                         raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE12");    
-                        filevars[i].gain=0;
-                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ88"); // SS o/
-                        filevars[i].ntoken=tmp;
+                        filevars[i].gain = 0;
+                        raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ88");
+                        filevars[i].ntoken = tmp;
                     }
                 }
-            } 
+            }
+
             
-            // T'écris pas dans la fichier ?
-            
+            for(i = 0; i<gamefile.numofplayers; i++){
+                
+                fd = raiseError(open(filevars[i].path, O_CREAT|O_WRONLY|O_APPEND) == -1, "OPEN");
+
+                write(fd, filevars[i].player_hand, strlen(filevars[i].player_hand));
+                write(fd, ";", 1);
+                
+                ptr = itoa(filevars[i].phand_value);
+                write(fd, ptr, strlen(ptr));
+                free(ptr);
+                write(fd, ";", 1);
+                
+                hand;
+                write(fd, hand, strlen(hand));
+                write(fd, ";", 1);
+
+                ptr = itoa(hand_value);                
+                write(fd, ptr, strlen(ptr));
+                free(ptr);
+                write(fd, ";", 1);
+
+                ptr = itoa(filevars[i].bet);
+                write(fd, ptr, strlen(ptr));
+                free(ptr);
+                write(fd, ";", 1);
+
+                ptr = itoa(filevars[i].gain);
+                write(fd, ptr, strlen(ptr));
+                free(ptr);
+                write(fd, ";", 1);
+                
+                ptr = itoa(filevars[i].ntoken);
+                write(fd, ptr, strlen(ptr));
+                free(ptr);
+                write(fd, "\n", 1);
+                
+                memset(filevars[i].player_hand, 0, strlen(filevars[i].player_hand));
+                memset(hand, 0, strlen(hand));
+                close(fd);
+            }
+                        
             end_round = 0;
             hand_value = 0;
             n_round++;
@@ -467,21 +464,19 @@ int main(int argc, char** argv) {
         for(i = 0; i<gamefile.numofplayers; i++){
             sig = END_GAME;
             raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE12");    
-            wait(NULL);                                
-        }
-
-        for(i = 0; i<gamefile.numofplayers; i++){
             close(pipe_fd[i][0][0]);
             close(pipe_fd[i][1][0]);
             close(pipe_fd[i][0][1]);
             close(pipe_fd[i][1][1]);
+            free(filevars[i].path);
+            wait(NULL);                                
         }
-        
+                        
         free_playervars(gamefile.next);
-        freeHand(bank_hand);
         exit(EXIT_SUCCESS);
     } 
-//#############################################################################//
+//###########################################################################################################################################################
+
     else{
         int n;
 
@@ -530,7 +525,8 @@ end :
                     raiseError(read(player.pipe_fd_read, &n, sizeof(int)) == -1, "READ5");
                     player.money+=n;
                     player.current_bet = player.bet;
-                    raiseError(write(player.pipe_fd_write, &n, sizeof(int)) == -1, "WRITE42"); // n = player.money non ?
+                    n = player.money;
+                    raiseError(write(player.pipe_fd_write, &n, sizeof(int)) == -1, "WRITE42");
                     break;
                 
                 case LOSE :    
