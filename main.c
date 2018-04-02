@@ -21,6 +21,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <sys/time.h>
+#include <time.h>
 
 #include "player.h"
 #include "gamesig.h"
@@ -285,6 +286,7 @@ int main(int argc, char** argv) {
         int sig;
         int tmp;
         int n_round;
+        int r;
         
         char* ptr;
         
@@ -298,6 +300,7 @@ int main(int argc, char** argv) {
         memset(waiting,0,gamefile.numofplayers*sizeof(int));
         memset(exited,0,gamefile.numofplayers*sizeof(int));
         memset(filevars,0,gamefile.numofplayers*sizeof(filevars_t));
+        srand(time(NULL));
         
 
         for(i = 0; i<gamefile.numofplayers; i++) filevars[i].path = itoa(l_pid[i]);
@@ -332,7 +335,8 @@ int main(int argc, char** argv) {
             while(end_round < gamefile.numofplayers){
                 if(!(waiting[i] || exited[i])){
                     raiseError(read(pipe_fd[i][0][0], &sig, sizeof(int)) == -1, "READ1");         
-
+                    r=rand()%3;
+                    
                     switch(sig){
 
                         case END_ROUND :
@@ -341,6 +345,8 @@ int main(int argc, char** argv) {
                             break;
 
                         case REQUEST_CARD :
+                            sig = r;
+                            raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE5");
                             sig = drawCard(deck);
                             for(j = 0; filevars[i].player_hand[j]; j++);                            
                             filevars[i].player_hand[j] = getCardChar(sig);
@@ -506,6 +512,11 @@ int main(int argc, char** argv) {
                     while(player.hand_value < player.stop){
                         n = REQUEST_CARD;
                         raiseError(write(player.pipe_fd_write, &n, sizeof(int)) == -1, "WRITE6");
+                        raiseError(read(player.pipe_fd_read, &n, sizeof(int)) == -1, "READ4");
+                        if(n==0 && (player.money >= player.bet*2)){
+                            player.bet=player.bet*2;
+                            break; 
+                        }
                         raiseError(read(player.pipe_fd_read, &n, sizeof(int)) == -1, "READ4");
                         player.hand_value += n;
                     }
