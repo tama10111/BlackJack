@@ -383,7 +383,7 @@ void checkWinner(filevars_t* filevars, int pipe_fd[][2][2], int hand_value, int 
                 filevars[i].ntoken = tmp;
 
 
-            } else if((filevars[i].phand_value > hand_value && filevars[i].phand_value <= 21) || (hand_value > 21 && filevars[i].phand_value <= 21)){
+            } else if(filevars[i].phand_value > hand_value && filevars[i].phand_value <= 21){
 
                 sig = WIN; tmp*= 2;
                 raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE6");
@@ -392,7 +392,7 @@ void checkWinner(filevars_t* filevars, int pipe_fd[][2][2], int hand_value, int 
                 raiseError(read(pipe_fd[i][0][0], &tmp, sizeof(int)) == -1, "READ42");                        
                 filevars[i].ntoken = tmp;
 
-            } else if(filevars[i].phand_value == hand_value){ 
+            } else if(filevars[i].phand_value == hand_value && hand_value <= 21){ 
 
                 sig = WIN; 
                 raiseError(write(pipe_fd[i][1][1], &sig, sizeof(int)) == -1, "WRITE6");                
@@ -439,7 +439,7 @@ void runPlayer(player_t* player, gamevars_t gamefile){
                     n = REQUEST_CARD;
                     raiseError(write(player->pipe_fd_write, &n, sizeof(int)) == -1, "WRITE9");                        
 
-                    if(!(rand()%3) && player->money >= player->bet*2){
+                    if(!(rand()%3) && player->money >= player->bet*2 && (player->hand_value == 9 || player->hand_value == 10)){
                         player->bet = player->bet*2;
                         player->bet_doubled = 1;
                     }
